@@ -54,14 +54,14 @@ def get_available_jobs(page):
             try:
                 row = rows.nth(i)
 
-                # --- CLICK EXPAND (to reveal instructions) ---
+                # --- CLICK EXPAND ---
                 try:
                     expand_btn = row.locator("pds-icon[name*='caret-right']")
                     if expand_btn.count() > 0:
                         expand_btn.click()
                         page.wait_for_timeout(400)
                 except:
-                    pass  # never break
+                    pass
 
                 # --- BASIC INFO ---
                 date = safe_text(row.locator("td[id*='startendDate']"))
@@ -96,7 +96,7 @@ def get_available_jobs(page):
 
 
 def send_job_details(jobs):
-    """Always sends a message, appends data if available."""
+    """Always sends message, appends info if available."""
 
     for job in jobs:
 
@@ -143,20 +143,16 @@ def check_for_jobs():
             page.wait_for_function(
                 """
                 () => {
-                    const panel = document.querySelector('#available-panel');
-                    if (!panel) return false;
+                    const hasRows = document.querySelectorAll(
+                        "tbody.mobile-table-body tr[id^='mobile-row-']"
+                    ).length > 0;
 
-                    const noJobs = panel
-                        .querySelector('.pds-message-info')
+                    const noJobs = document.querySelector('#available-panel .pds-message-info')
                         ?.innerText
-                        .toLowerCase()
+                        ?.toLowerCase()
                         .includes('no jobs');
 
-                    const hasRows = panel
-                        .querySelector('tbody.mobile-table-body')
-                        ?.querySelectorAll('tr[id^="mobile-row-"]').length > 0;
-
-                    return noJobs || hasRows;
+                    return hasRows || noJobs;
                 }
                 """,
                 timeout=60000
@@ -166,31 +162,40 @@ def check_for_jobs():
             browser.close()
             return
 
-        no_jobs_locator = page.locator("#available-panel .pds-message-info")
+        # --- REAL DETECTION ---
+        rows = page.locator("tbody.mobile-table-body tr[id^='mobile-row-']")
+        row_count = rows.count()
 
-        if no_jobs_locator.count() > 0 and \
-           "no jobs" in no_jobs_locator.first.inner_text().lower():
+        if row_count == 0:
+            print("❌ No job rows detected (avoiding false alert).")
+            browser.close()
+            return
 
-            print("❌ No jobs available.")
+        # Optional extra safety
+        try:
+            first_row_text = rows.nth(0).inner_text().strip()
+            if not first_row_text:
+                print("⚠️ Rows detected but empty — skipping alert.")
+                browser.close()
+                return
+        except:
+            pass
 
-        else:
+        print(f"✅ Jobs detected: {row_count}")
 
-            print("✅ Jobs available!")
+        # ✅ ALWAYS send main alert (only when real jobs exist)
+        send_telegram("🚨 Jobs available on SmartFind!")
 
-            # ✅ ALWAYS send main alert (UNCHANGED)
-            send_telegram("🚨 Jobs available on SmartFind!")
+        try:
+            page.wait_for_timeout(1500)
 
-            # THEN try to extract details safely
-            try:
-                page.wait_for_timeout(1500)  # allow UI to fully render
+            jobs = get_available_jobs(page)
 
-                jobs = get_available_jobs(page)
+            if jobs:
+                send_job_details(jobs)
 
-                if jobs:
-                    send_job_details(jobs)
-
-            except Exception as e:
-                print("Detail extraction failed:", e)
+        except Exception as e:
+            print("Detail extraction failed:", e)
 
         browser.close()
 
