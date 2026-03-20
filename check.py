@@ -30,51 +30,64 @@ def send_telegram(message):
         print("Telegram error:", e)
 
 
+# --- SAFE TEXT HELPER ---
+def safe_text(locator):
+    try:
+        if locator.count() > 0:
+            return locator.first.inner_text().strip()
+    except:
+        pass
+    return None
+
+
 def get_available_jobs(page):
-    """Safely extract job info. Returns empty list if anything fails."""
+    """Extract job info safely (never breaks)."""
 
     jobs = []
 
     try:
-        rows = page.locator("#parent-table-desktop-available tr")
+        rows = page.locator("tbody.mobile-table-body tr[id^='mobile-row-']")
         count = rows.count()
 
-        if count <= 1:
-            return jobs
-
-        for i in range(1, count):
+        for i in range(count):
 
             try:
-                date = rows.nth(i).locator(
-                    f"#desktop-row-data-startenddate-{i} p"
-                ).all_text_contents()
+                row = rows.nth(i)
 
-                time_text = rows.nth(i).locator(
-                    f"#desktop-row-data-startendtime-{i} p"
-                ).all_text_contents()
+                # --- CLICK EXPAND (to reveal instructions) ---
+                try:
+                    expand_btn = row.locator("pds-icon[name*='caret-right']")
+                    if expand_btn.count() > 0:
+                        expand_btn.click()
+                        page.wait_for_timeout(400)
+                except:
+                    pass  # never break
 
-                employee = rows.nth(i).locator(
-                    f"#desktop-row-data-employee-{i} p"
-                ).all_text_contents()
+                # --- BASIC INFO ---
+                date = safe_text(row.locator("td[id*='startendDate']"))
+                time_text = safe_text(row.locator("td[id*='startendtime']"))
 
-                classification = rows.nth(i).locator(
-                    f"#desktop-row-data-classification-{i}"
-                ).inner_text()
+                # --- EXPANDED PANEL ---
+                expanded = page.locator(f"#mobile-row-expanded-{i}")
 
-                location = rows.nth(i).locator(
-                    f"#desktop-row-data-location-{i} p"
-                ).all_text_contents()
+                school = safe_text(
+                    expanded.locator("pds-icon[name='school']").locator("xpath=..")
+                )
+
+                instructions = safe_text(
+                    expanded.locator(".text")
+                )
 
                 jobs.append({
-                    "date": " ".join(date).strip(),
-                    "time": " ".join(time_text).strip(),
-                    "employee": " ".join(employee).strip(),
-                    "classification": classification.strip(),
-                    "location": " ".join(location).strip()
+                    "date": date,
+                    "time": time_text,
+                    "location": school,
+                    "instructions": instructions
                 })
 
             except Exception as e:
-                print("Row parsing error:", e)
+                print(f"Job {i} failed:", e)
+                continue
 
     except Exception as e:
         print("Job scraping error:", e)
@@ -83,18 +96,23 @@ def get_available_jobs(page):
 
 
 def send_job_details(jobs):
+    """Always sends a message, appends data if available."""
 
     for job in jobs:
 
-        message = f"""
-🚨 SMARTFIND JOB ALERT
+        message = "🚨 SMARTFIND JOB ALERT\n"
 
-School: {job['location']}
-Teacher: {job['employee']}
-Date: {job['date']}
-Time: {job['time']}
-Classification: {job['classification']}
-"""
+        if job.get("location"):
+            message += f"\n🏫 School: {job['location']}"
+
+        if job.get("date"):
+            message += f"\n📅 Date: {job['date']}"
+
+        if job.get("time"):
+            message += f"\n⏰ Time: {job['time']}"
+
+        if job.get("instructions"):
+            message += f"\n📝 Notes: {job['instructions']}"
 
         send_telegram(message)
 
@@ -135,8 +153,8 @@ def check_for_jobs():
                         .includes('no jobs');
 
                     const hasRows = panel
-                        .querySelector('#parent-table-desktop-available tbody')
-                        ?.querySelectorAll('tr').length > 0;
+                        .querySelector('tbody.mobile-table-body')
+                        ?.querySelectorAll('tr[id^="mobile-row-"]').length > 0;
 
                     return noJobs || hasRows;
                 }
@@ -159,11 +177,13 @@ def check_for_jobs():
 
             print("✅ Jobs available!")
 
-            # ALWAYS send alert first
+            # ✅ ALWAYS send main alert (UNCHANGED)
             send_telegram("🚨 Jobs available on SmartFind!")
 
-            # THEN attempt detailed scrape
+            # THEN try to extract details safely
             try:
+                page.wait_for_timeout(1500)  # allow UI to fully render
+
                 jobs = get_available_jobs(page)
 
                 if jobs:
