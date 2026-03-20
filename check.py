@@ -185,6 +185,6 @@ while True:
     except Exception as e:
         print("Unexpected error:", e)
 
-    print("⏳ Sleeping 120 seconds...\n")
+    print("⏳ Sleeping 30 seconds...\n")
 
-    time.sleep(60)
+    time.sleep(30)
