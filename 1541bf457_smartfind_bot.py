@@ -5,8 +5,8 @@ from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
-USERNAME           = os.getenv("SMARTFIND_USERNAME", "1088418")
-PASSWORD           = os.getenv("SMARTFIND_PASSWORD", "w$Rk7A$uZX4G8Ln")
+USERNAME           = os.getenv("SMARTFIND_USERNAME")
+PASSWORD           = os.getenv("SMARTFIND_PASSWORD")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
 
